@@ -11,3 +11,6 @@ To get help of how to use the binary,
 
 ./DPIDP -h
 	
+2018 Note. 
+If you find this code useful for your research, please cite me 
+https://doi.org/10.1002/cpe.3969
