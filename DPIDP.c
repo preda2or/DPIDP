@@ -491,7 +491,8 @@ mstats* ParalelFSIDP(int reqthreads) {
     if ((reqthreads<nthreads) && (reqthreads!=0)) nthreads=reqthreads;
     omp_set_num_threads(nthreads);
 
-    for (i=2; i<=n; i++) {
+    int mid = (n + 1) / 2;
+    for (i=2; i <= mid; i++) {
         totcombinations=binom(n,i);
         threadcombinations=(totcombinations/nthreads)+1;
         getIDPBounds(n,i,&lower_bound, &upper_bound);
@@ -530,6 +531,88 @@ mstats* ParalelFSIDP(int reqthreads) {
             }
         }
     }
+
+    int high = (2 * n) / 3;
+    #pragma omp parallel for schedule(static)
+    for (i=mid + 1; i <= high; i++) {
+        totcombinations=binom(n,i);
+        threadcombinations=(totcombinations/nthreads)+1;
+        getIDPBounds(n,i,&lower_bound, &upper_bound);
+        //#pragma omp parallel if (i>5) 
+        {
+			unsigned int bitMask,set1,set2,twoscomplement,subMask;
+			int ini,tmp,max,threadidx,s1,firstiteration=1;
+            threadidx=omp_get_thread_num();
+            bitMask=getComb(n,i,1);
+           // #pragma omp for schedule (static,threadcombinations)
+            for (c=0; c<totcombinations; c++) {
+                threadidx=omp_get_thread_num();
+                if (firstiteration) {
+                    firstiteration=0;
+                    bitMask=getComb(n,i,c+1);
+                } else bitMask=getNext(n,i,bitMask);
+	            ini=values[bitMask];
+	            max=ini;
+				subMask=removelsb(bitMask);
+				twoscomplement=~subMask+1;
+                set1=twoscomplement & subMask;
+				do {
+					s1=__builtin_popcount(set1);
+	                if ((s1<upper_bound) && (s1>=lower_bound)) {
+						#ifdef STATS_ON			           
+							#pragma omp atomic
+			   		    	a->condition_evaluated++;
+                    	#endif
+						set2=bitMask-set1;
+                    	tmp=values[set1]+values[set2];
+                    	if (tmp>max) max=tmp;
+					}
+				    set1=(twoscomplement + set1) & subMask;
+				} while (set1);
+                if (max>ini) values[bitMask]=max;
+            }
+        }
+    }
+
+	for (i=n; i <= n; i++) {
+		totcombinations=binom(n,i);
+		threadcombinations=(totcombinations/nthreads)+1;
+		getIDPBounds(n,i,&lower_bound, &upper_bound);
+		#pragma omp parallel if (i>5) 
+		{
+			unsigned int bitMask,set1,set2,twoscomplement,subMask;
+			int ini,tmp,max,threadidx,s1,firstiteration=1;
+		    threadidx=omp_get_thread_num();
+		    bitMask=getComb(n,i,1);
+		    #pragma omp for schedule (static,threadcombinations)
+		    for (c=0; c<totcombinations; c++) {
+		        threadidx=omp_get_thread_num();
+		        if (firstiteration) {
+		            firstiteration=0;
+		            bitMask=getComb(n,i,c+1);
+		        } else bitMask=getNext(n,i,bitMask);
+		        ini=values[bitMask];
+		        max=ini;
+				subMask=removelsb(bitMask);
+				twoscomplement=~subMask+1;
+		        set1=twoscomplement & subMask;
+				do {
+					s1=__builtin_popcount(set1);
+		            if ((s1<upper_bound) && (s1>=lower_bound)) {
+						#ifdef STATS_ON			           
+							#pragma omp atomic
+			   		    	a->condition_evaluated++;
+		            	#endif
+						set2=bitMask-set1;
+		            	tmp=values[set1]+values[set2];
+		            	if (tmp>max) max=tmp;
+					}
+				    set1=(twoscomplement + set1) & subMask;
+				} while (set1);
+		        if (max>ini) values[bitMask]=max;
+		    }
+		}
+	}
   //  a->result=findSolution(values,n);
 	findSolution(values,n);
     return a;
